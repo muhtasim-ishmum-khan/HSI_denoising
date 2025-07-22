@@ -20,12 +20,12 @@ class MDTA(nn.Module):
         # Scaling keeps the values in a reasonable range.
         self.scale = (dim // num_heads) ** -0.5
 
-        # Query, Key, Value (qkv) Convolution layer takes an input dim channels and outputs dim * 3 channels. 
+        # Query, Key, Value (qkv) Convolution layer takes an input dim channels and outputs dim * 3 channels.
         # These channels are split into query, key, and value, each with dim channels.
         # bias = false to reduce parameters slightly and 1 means kernel size (1x1 convolution).
         self.qkv = nn.Conv2d(dim, dim * 3, kernel_size=1, bias=False)
         # In hyperspectral images, adjacent pixels often have correlated spectral signatures.
-        # The self.dwconv layer applies a 3x3 filter to each channel of q, k, and v, incorporating information from the 3x3 neighborhood around each pixel. 
+        # The self.dwconv layer applies a 3x3 filter to each channel of q, k, and v, incorporating information from the 3x3 neighborhood around each pixel.
         # This adds local spatial context and enriches q,k,v
         self.dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, padding=1, groups=dim * 3, bias=False)
 
@@ -35,9 +35,9 @@ class MDTA(nn.Module):
         # This applies the softmax function along the last dimension to normalize attention scores into probabilities.
         self.softmax = nn.Softmax(dim=-1)
 
-        self.latest_attn_map = None 
+        self.latest_attn_map = None
 
-    # The forward method defines how the input data flows through the MDTA module    
+    # The forward method defines how the input data flows through the MDTA module
     def forward(self, x):
         # The input x is a tensor with shape (B, C, H, W)
         B, C, H, W = x.shape
@@ -49,7 +49,7 @@ class MDTA(nn.Module):
         # the qkv convolution transforms the input x from dim channels to dim * 3 channels.
         # The chunk operation splits the tensor into 3 equal parts (querry, key, values).
         # dim=1 is the index of channel dimension.
-        q, k, v = qkv.chunk(3, dim=1)  
+        q, k, v = qkv.chunk(3, dim=1)
         # Divides the channel dimension C into num_heads to harness the multi head attention mechanism.
         head_dim = C // self.num_heads
         assert head_dim * self.num_heads == C, "C must be divisible by num_heads"
@@ -60,7 +60,7 @@ class MDTA(nn.Module):
         k = k.view(B, self.num_heads, head_dim, H * W).transpose(2, 3)
         v = v.view(B, self.num_heads, head_dim, H * W).transpose(2, 3)
 
-        # Applies L2 normalization that Ensures that query and key vectors have unit length, 
+        # Applies L2 normalization that Ensures that query and key vectors have unit length,
         # which stabilizes the dot-product attention computation by preventing large values.
         q = F.normalize(q, dim=-1)
         k = F.normalize(k, dim=-1)
@@ -76,7 +76,7 @@ class MDTA(nn.Module):
 
         # Multiplies the attention matrix ((B, h, HW, HW)) with the value tensor ((B, h, HW, head_dim)).
         # The result is a weighted sum of values, where weights come from the attention scores.
-        out = torch.matmul(attn, v)  
+        out = torch.matmul(attn, v)
         # The tensor reshaped back to the original image-like format that ensures the output matches the input shape of the MDTA module.
         out = out.transpose(2, 3).reshape(B, C, H, W)
         # It helps the model learn how to best integrate the information from the multi-head attention by refining the attention output.
@@ -84,7 +84,7 @@ class MDTA(nn.Module):
         return self.proj(out)
 
 
-    
+
 # Core architecture of the Restormer.
 class RestormerBlock(nn.Module):
     def __init__(self, dim, num_heads):
@@ -95,11 +95,11 @@ class RestormerBlock(nn.Module):
         # [dim, 1, 1] means that normalization is applied per pixel across the channel dimension.
         # As attention typically computes relationships between individual pixels, per pixel normalization is logical here.
         self.norm = nn.LayerNorm(dim)
-    
+
     # Defines how data flows through the block during processing.
     def forward(self, x):
         # save the original input.
-        residual = x 
+        residual = x
         # Rearranges the dimensions of the input tensor x from (B, C, H, W) to (B, H, W, C).
         # Because xpects the channel dimension (C) to be the last dimension.
         x = x.permute(0, 2, 3, 1)
@@ -117,9 +117,9 @@ class RestormerHSI(nn.Module):
     # in_channels: The number of spectral bands in the input HSI.
     def __init__(self, in_channels, dim=48, num_heads=6):
         super().__init__()
-        # The convolution layer works as a local feature extractor. 
+        # The convolution layer works as a local feature extractor.
         # As, attention block captures global relationship among pixels we need something to extract local information (edges, textures)
-        # Simply, this is a feature extractor that converts the raw HSI data into a more manageable set of (dim = n) feature channels. 
+        # Simply, this is a feature extractor that converts the raw HSI data into a more manageable set of (dim = n) feature channels.
         # Each channel captures different patterns (like edges, textures) across the spectral bands.
         self.embedding = nn.Conv2d(in_channels, dim, 3, padding=1)
         # encoder is like the brain of the model. It processes the initial features to highlight important parts of the HSI.
@@ -129,14 +129,14 @@ class RestormerHSI(nn.Module):
         )
         # This layer is like a reconstructor that translates the internal features (dim=n channels) back into the original HSI format (original n channels).
         self.output = nn.Conv2d(dim, in_channels, 3, padding=1)
-    
+
     # This forward layer defines how the data flows through the block.
     def forward(self, x):
         # data flow: input -> local feature extraction and channel conversion -> important patterns attented -> reconstruct to original shape
         features = self.embedding(x)
         features = self.encoder(features)
         return self.output(features)
-    
+
     # This method retrieves the attention map generated by the last RestormerBlock in the encoder.
     def get_attention_map(self):
         # Accesses the last restormer block by [-1] then go to the corresponding mdta block to get the attention map.
@@ -206,9 +206,7 @@ def extract_patches(
 
     return patch_list, coords, metadata
 
-# ---------------------------
 # Automated .mat loader
-# ---------------------------
 def load_hsi_from_mat(file_path):
     data = sio.loadmat(file_path)
     for key in data:
@@ -216,9 +214,7 @@ def load_hsi_from_mat(file_path):
             return data[key], key
     raise ValueError(f"No valid 3D HSI data found in {file_path}")
 
-# ---------------------------
 # Patch generation pipeline
-# ---------------------------
 def generate_patches_from_mat(file_path, k_top, k_mid, k_rand, patch_size=32):
     # Load the hyperspectral image and key from the .mat file
     hsi_data, key_used = load_hsi_from_mat(file_path)
@@ -264,9 +260,7 @@ def generate_patches_from_mat(file_path, k_top, k_mid, k_rand, patch_size=32):
     return patches, coords, metadata
 
 
-# ---------------------------
 # Visualization
-# ---------------------------
 def visualize_patch(train_dir, patch_img, file, x, y, j, patch_size):
     mat_path = os.path.join(train_dir, file)
     full_data, _ = load_hsi_from_mat(mat_path)
@@ -297,23 +291,21 @@ def visualize_patch(train_dir, patch_img, file, x, y, j, patch_size):
     axs[1].axis('off')
 
     plt.tight_layout()
-    #plt.show()
+    # plt.show()
     save_path = os.path.join(
         "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/init/patch_img",
         f"{file}_patch_{x}_{y}.png"
     )
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path)
-    print(f"✅ Patch visualization saved at: {save_path}")
+    print(f"Patch visualization saved at: {save_path}")
     plt.close()
 
-# ---------------------------
-# Main Execution
-# ---------------------------
+
+# Main Execution Block
 if __name__ == "__main__":
     train_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/trainset"
     patch_size = 32
-    k = 10  # top-k patches per file
 
     total_patches = 0
     all_patches = []
@@ -323,7 +315,7 @@ if __name__ == "__main__":
 
 
     for file_name in mat_files:
-        print(f"\n📂 Processing file: {file_name}")
+        print(f"\nProcessing file....: {file_name}")
 
         file_path = os.path.join(train_dir, file_name)
 
@@ -334,15 +326,15 @@ if __name__ == "__main__":
 
             num_patches = len(patches)
             total_patches += num_patches
-            print(f"✅ Extracted {num_patches} patches from {file_name}")
+            print(f"Extracted {num_patches} patches from {file_name}")
 
             all_patches.extend(patches)
             all_metadata.extend(metadata)
 
         except Exception as e:
-            print(f"❌ Error processing {file_name}: {e}")
+            print(f"Error processing {file_name}: {e}")
 
-    print(f"\n🎯 Total patches extracted from all files: {total_patches}")
+    print(f"\nTotal patches extracted from all files: {total_patches}")
 
     if total_patches > 0:
         idx = 0
@@ -350,4 +342,4 @@ if __name__ == "__main__":
         file, x, y, j = all_metadata[idx]
         visualize_patch(train_dir, patch, file, x, y, j, patch_size)
     else:
-        print("⚠️ No patches were extracted.")
+        print("No patches were extracted.")

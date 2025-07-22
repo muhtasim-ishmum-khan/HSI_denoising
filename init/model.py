@@ -25,7 +25,7 @@ class TransformerBlock(nn.Module):
     def init(self, dim, num_heads):
         super().init()
         self.norm1 = nn.LayerNorm(dim)
-        self.attn = WindowAttention(dim, heads)
+        self.attn = WindowAttention(dim, num_heads)
         self.norm2 = nn.LayerNorm(dim)
         self.ff = nn.Sequential(
             nn.Linear(dim, dim * 4),
@@ -62,8 +62,6 @@ class Uformer(nn.Module):
 
         x3 = self.up1(x2) + x1
         out = self.decoder1(x3)
-
         return out
-    
-        
+ 
         

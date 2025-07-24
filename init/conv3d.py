@@ -56,7 +56,7 @@ class SpectralSpatialConv3D(nn.Module):
 # extracts smaller patches from these images,
 # processes them through a Conv3D model to extract features,
 # and returns both the input patches and the processed outputs.
-def extract_and_process_patches(train_dir, patch_size=32, k_top=10, k_mid=10, k_rand=10, use_gpu=True, batch_size=32):
+def extract_and_process_patches_conv3d(train_dir, patch_size=32, k_top=10, k_mid=10, k_rand=10, use_gpu=True, batch_size=32):
     # looks in the train_dir folder and finds all files ending with .mat
     mat_files = [f for f in os.listdir(train_dir) if f.endswith(".mat")]
     # list to store the patches extracted from these files.
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     train_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/trainset"
     patch_size = 32
 
-    patch_tensor, output, model = extract_and_process_patches(train_dir, patch_size=patch_size, batch_size=32)
+    patch_tensor, output, model = extract_and_process_patches_conv3d(train_dir, patch_size=patch_size, batch_size=32)
 
     if patch_tensor is not None and output is not None:
         print(f"Input shape: {patch_tensor.shape}")

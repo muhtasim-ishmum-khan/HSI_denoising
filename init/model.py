@@ -62,8 +62,6 @@ class Uformer(nn.Module):
 
         x3 = self.up1(x2) + x1
         out = self.decoder1(x3)
-
         return out
-    
-        
+ 
         

@@ -53,20 +53,7 @@ class SpectralSpatialConv3D(nn.Module):
         return x_fused
 
 def load_and_process_patches_conv3d(mat_file_path, use_gpu=True, batch_size=32, patch_key='patches'):
-    """
-    Load pre-extracted patches from a .mat file and process them through the Conv3D model.
-    
-    Args:
-        mat_file_path (str): Path to the .mat file containing patches
-        use_gpu (bool): Whether to use GPU for processing
-        batch_size (int): Batch size for processing
-        patch_key (str): Key name in the .mat file that contains the patches
-    
-    Returns:
-        tuple: (input_patches, output_features, model)
-    """
-    
-    # Load patches from .mat file
+
     try:
         mat_data = sio.loadmat(mat_file_path)
         print(f"Loading patches from: {mat_file_path}")
@@ -160,7 +147,7 @@ def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", 
         axes[1, i].axis('off')
 
     plt.tight_layout()
-    save_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/conv_3d"
+    save_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/conv_3d"
     os.makedirs(save_dir, exist_ok=True)
 
     # Build a base filename
@@ -179,7 +166,7 @@ def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", 
 
 if __name__ == "__main__":
     # Path to the .mat file containing pre-extracted patches
-    mat_file_path = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches/train_Wash2_patches.mat"
     
     # Load and process patches from .mat file
     patch_tensor, output, model = load_and_process_patches_conv3d(

@@ -383,7 +383,8 @@ def visualize_patch(train_dir, patch_img, file, x, y, j, patch_size):
     plt.tight_layout()
     # plt.show()
     save_path = os.path.join(
-        "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/init/patch_img_MK",
+        #"/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/init/patch_img_MK",
+        "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/init/patch_img"
         f"{file}_patch_{x}_{y}.png"
     )
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -435,9 +436,11 @@ def visualize_patch(train_dir, patch_img, file, x, y, j, patch_size):
 #         print("No patches were extracted.")
 
 if __name__ == "__main__":
-    train_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/trainset"
+    # train_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/trainset"
+    train_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/trainset"
     # ADD THIS LINE - specify where to save patches
-    patch_output_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches"
+    # patch_output_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches"
+    patch_output_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches"
     patch_size = 32
 
     # ADD THIS LINE - create storage instance

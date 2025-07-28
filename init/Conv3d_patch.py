@@ -46,6 +46,7 @@ class SpectralSpatialConv3D(nn.Module):
         x_fused = self.dropout(x_fused)
         return x_fused
 
+<<<<<<< HEAD
 def load_patches_from_mat(mat_file_path, patch_key='patches'):
     """
     Load patches from a .mat file and convert to PyTorch tensor.
@@ -57,6 +58,10 @@ def load_patches_from_mat(mat_file_path, patch_key='patches'):
     Returns:
         torch.Tensor: Patches in format (N, 1, H, W, C)
     """
+=======
+def load_and_process_patches_conv3d(mat_file_path, use_gpu=True, batch_size=32, patch_key='patches'):
+
+>>>>>>> 77214e7c97c7ceda8419293fbd1df7b97a7f55a7
     try:
         print(f"Loading patches from: {mat_file_path}")
         mat_data = sio.loadmat(mat_file_path)
@@ -211,6 +216,7 @@ def train_conv3d_model(patches_tensor, num_epochs=50, batch_size=16, learning_ra
     print("Training completed!")
     return model, loss_history, memory_history
 
+<<<<<<< HEAD
 def visualize_results(original_patches, model, device, save_dir="/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/conv_3d"):
     """
     Visualize original patches and extracted features side by side.
@@ -221,6 +227,30 @@ def visualize_results(original_patches, model, device, save_dir="/Users/muhtasim
         device: Computing device
         save_dir: Directory to save visualizations
     """
+=======
+# The visualize_feature_maps function takes input and output tensors from a neural network, 
+# selects one specific patch, and creates a side-by-side visualization.
+def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", x=0, y=0):
+    input_patch = input_tensor[index, 0].cpu().numpy()
+    output_patch = output_tensor[index].cpu().numpy()
+
+    fig, axes = plt.subplots(2, 5, figsize=(15, 6))
+    fig.suptitle("Input Spectral Bands vs Output Feature Maps", fontsize=14)
+
+    for i in range(5):
+        band_idx = i * input_patch.shape[2] // 5  # Changed from shape[0] to shape[2] for spectral dimension
+        axes[0, i].imshow(input_patch[:, :, band_idx], cmap='gray')  # Updated indexing
+        axes[0, i].set_title(f"Input Band {band_idx}")
+        axes[0, i].axis('off')
+
+    for i in range(5):
+        axes[1, i].imshow(output_patch[i, output_patch.shape[1]//2], cmap='viridis')
+        axes[1, i].set_title(f"Feature Map {i}")
+        axes[1, i].axis('off')
+
+    plt.tight_layout()
+    save_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/conv_3d"
+>>>>>>> 77214e7c97c7ceda8419293fbd1df7b97a7f55a7
     os.makedirs(save_dir, exist_ok=True)
     
     model.eval()
@@ -361,4 +391,25 @@ def main():
     print("=" * 60)
 
 if __name__ == "__main__":
+<<<<<<< HEAD
     main()
+=======
+    # Path to the .mat file containing pre-extracted patches
+    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    
+    # Load and process patches from .mat file
+    patch_tensor, output, model = load_and_process_patches_conv3d(
+        mat_file_path, 
+        batch_size=32, 
+        patch_key='patches'  # Adjust this key name based on your .mat file structure
+    )
+
+    if patch_tensor is not None and output is not None:
+        print(f"Input shape: {patch_tensor.shape}")
+        print(f"Output shape: {output.shape}")
+        visualize_feature_maps(patch_tensor, output, index=0, file="sample", x=0, y=0)
+    else:
+        print("Patch processing failed.")
+
+
+>>>>>>> 77214e7c97c7ceda8419293fbd1df7b97a7f55a7

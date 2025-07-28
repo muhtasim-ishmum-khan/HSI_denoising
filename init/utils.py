@@ -230,7 +230,8 @@ if __name__ == "__main__":
     # visualize_hsi_comparison(hsi_tensor, noisy_hsi, title="HSI Clean vs Noisy")
     
     # Option 2: Process saved patches (NEW)
-    patch_file_path = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    # patch_file_path = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    patch_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches/train_Wash2_patches.mat"
     
     # Load patches
     patches, coordinates, source_file = load_patches_from_mat(patch_file_path)

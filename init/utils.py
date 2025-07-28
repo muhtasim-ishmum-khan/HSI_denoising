@@ -69,6 +69,48 @@ def load_patches_from_mat(patch_file_path):
     
     return patches, coordinates, source_file
 
+def save_noisy_patches(noisy_patches, coordinates, source_file, original_patch_file_path, 
+                      output_folder="noisy_patches", noise_std=None):
+    """
+    Save noisy patches to a .mat file in the specified folder.
+    Args:
+        noisy_patches: torch tensor of noisy patches
+        coordinates: coordinates array from original file
+        source_file: source file name from original file
+        original_patch_file_path: path to the original patch file
+        output_folder: folder name to save noisy patches
+        noise_std: noise standard deviation for metadata
+    """
+    # Create output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Created directory: {output_folder}")
+    
+    # Generate output filename
+    original_filename = os.path.basename(original_patch_file_path)
+    filename_without_ext = os.path.splitext(original_filename)[0]
+    output_filename = f"{filename_without_ext}_noisy.mat"
+    output_path = os.path.join(output_folder, output_filename)
+    
+    # Convert tensor to numpy for saving
+    noisy_patches_np = noisy_patches.detach().cpu().numpy()
+    
+    # Prepare data dictionary
+    save_data = {
+        'patches': noisy_patches_np,
+        'coordinates': coordinates,
+        'source_file': source_file,
+        'noise_std': noise_std if noise_std is not None else 0.0,
+        'original_patch_file': original_patch_file_path
+    }
+    
+    # Save to .mat file
+    sio.savemat(output_path, save_data)
+    print(f"Saved noisy patches to: {output_path}")
+    print(f"Shape: {noisy_patches_np.shape}, Noise std: {noise_std}")
+    
+    return output_path
+
 # -------------------------------
 # 3. Visualize HSI
 # -------------------------------
@@ -129,48 +171,49 @@ def visualize_hsi_comparison(clean_hsi, noisy_hsi, bands=[57, 27, 17], title="HS
 
 ################################################### VISUALIZING THE PATCHES WITH NOISE ################################################### 
 
-def visualize_patch_comparison(clean_patches, noisy_patches, coordinates, max_patches=6, bands=[57, 27, 17]):
-    """
-    Visualize clean vs noisy patches side by side
-    Args:
-        clean_patches: torch tensor (num_patches, channels, height, width)
-        noisy_patches: torch tensor (num_patches, channels, height, width)
-        coordinates: array of (x, y) coordinates
-        max_patches: maximum number of patches to display
-        bands: RGB band indices for visualization
-    """
-    num_patches = min(clean_patches.shape[0], max_patches)
+# def visualize_patch_comparison(clean_patches, noisy_patches, coordinates, max_patches=6, bands=[57, 27, 17]):
+#     """
+#     Visualize clean vs noisy patches side by side
+#     Args:
+#         clean_patches: torch tensor (num_patches, channels, height, width)
+#         noisy_patches: torch tensor (num_patches, channels, height, width)
+#         coordinates: array of (x, y) coordinates
+#         max_patches: maximum number of patches to display
+#         bands: RGB band indices for visualization
+#     """
+#     num_patches = min(clean_patches.shape[0], max_patches)
     
-    fig, axes = plt.subplots(2, num_patches, figsize=(3*num_patches, 6))
-    if num_patches == 1:
-        axes = axes.reshape(2, 1)
+#     fig, axes = plt.subplots(2, num_patches, figsize=(3*num_patches, 6))
+#     if num_patches == 1:
+#         axes = axes.reshape(2, 1)
     
-    for i in range(num_patches):
-        # Convert patches to numpy and transpose to (H, W, C)
-        clean_patch = clean_patches[i].permute(1, 2, 0).numpy()
-        noisy_patch = noisy_patches[i].permute(1, 2, 0).numpy()
+#     for i in range(num_patches):
+#         # Convert patches to numpy and transpose to (H, W, C)
+#         clean_patch = clean_patches[i].permute(1, 2, 0).numpy()
+#         noisy_patch = noisy_patches[i].permute(1, 2, 0).numpy()
         
-        # Create RGB representations
-        clean_rgb = clean_patch[:, :, bands]
-        noisy_rgb = noisy_patch[:, :, bands]
+#         # Create RGB representations
+#         clean_rgb = clean_patch[:, :, bands]
+#         noisy_rgb = noisy_patch[:, :, bands]
         
-        # Normalize RGB
-        clean_rgb = (clean_rgb - clean_rgb.min()) / (clean_rgb.max() - clean_rgb.min() + 1e-8)
-        noisy_rgb = (noisy_rgb - noisy_rgb.min()) / (noisy_rgb.max() - noisy_rgb.min() + 1e-8)
+#         # Normalize RGB
+#         clean_rgb = (clean_rgb - clean_rgb.min()) / (clean_rgb.max() - clean_rgb.min() + 1e-8)
+#         noisy_rgb = (noisy_rgb - noisy_rgb.min()) / (noisy_rgb.max() - noisy_rgb.min() + 1e-8)
         
-        # Plot clean patch
-        axes[0, i].imshow(clean_rgb)
-        axes[0, i].set_title(f"Clean Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
-        axes[0, i].axis('off')
+#         # Plot clean patch
+#         axes[0, i].imshow(clean_rgb)
+#         axes[0, i].set_title(f"Clean Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
+#         axes[0, i].axis('off')
         
-        # Plot noisy patch
-        axes[1, i].imshow(noisy_rgb)
-        axes[1, i].set_title(f"Noisy Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
-        axes[1, i].axis('off')
+#         # Plot noisy patch
+#         axes[1, i].imshow(noisy_rgb)
+#         axes[1, i].set_title(f"Noisy Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
+#         axes[1, i].axis('off')
     
-    plt.suptitle("Clean vs Noisy HSI Patches Comparison", fontsize=14)
-    plt.tight_layout()
-    plt.show()
+#     plt.suptitle("Clean vs Noisy HSI Patches Comparison", fontsize=14)
+#     plt.tight_layout()
+    
+#     plt.show()
 
 #################################################################################################################################################
 
@@ -195,15 +238,68 @@ if __name__ == "__main__":
     print(f"Patch shape: {patches.shape[1:]} (channels, height, width)")
     
     # Add noise to patches
-    noise_injector = HSINoiseInjector(noise_std=0.1)
+    # Add noise to patches
+    noise_std = 0.1  # Store noise_std in a variable
+    noise_injector = HSINoiseInjector(noise_std=noise_std)
     noisy_patches = torch.stack([
         noise_injector.add_white_gaussian_noise(patch.unsqueeze(0)).squeeze(0) 
         for patch in patches
     ])
     
+    # Save noisy patches
+    save_noisy_patches(noisy_patches, coordinates, source_file, patch_file_path, 
+                      output_folder="noisy_patches", noise_std=noise_std)
+    
     # Visualize clean vs noisy patches
-    visualize_patch_comparison(patches, noisy_patches, coordinates, max_patches=6)
-
+   # Visualize clean vs noisy patches
+    # Create and save the comparison plot
+    num_patches = min(patches.shape[0], 6)
+    bands = [57, 27, 17]
+    
+    fig, axes = plt.subplots(2, num_patches, figsize=(3*num_patches, 6))
+    if num_patches == 1:
+        axes = axes.reshape(2, 1)
+    
+    for i in range(num_patches):
+        # Convert patches to numpy and transpose to (H, W, C)
+        clean_patch = patches[i].permute(1, 2, 0).numpy()
+        noisy_patch = noisy_patches[i].permute(1, 2, 0).numpy()
+        
+        # Create RGB representations
+        clean_rgb = clean_patch[:, :, bands]
+        noisy_rgb = noisy_patch[:, :, bands]
+        
+        # Normalize RGB
+        clean_rgb = (clean_rgb - clean_rgb.min()) / (clean_rgb.max() - clean_rgb.min() + 1e-8)
+        noisy_rgb = (noisy_rgb - noisy_rgb.min()) / (noisy_rgb.max() - noisy_rgb.min() + 1e-8)
+        
+        # Plot clean patch
+        axes[0, i].imshow(clean_rgb)
+        axes[0, i].set_title(f"Clean Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
+        axes[0, i].axis('off')
+        
+        # Plot noisy patch
+        axes[1, i].imshow(noisy_rgb)
+        axes[1, i].set_title(f"Noisy Patch {i+1}\nPos: {coordinates[i]}", fontsize=10)
+        axes[1, i].axis('off')
+    
+    plt.suptitle("Clean vs Noisy HSI Patches Comparison", fontsize=14)
+    plt.tight_layout()
+    
+    # Save FIRST as JPEG
+    if not os.path.exists("noisy_patches"):
+        os.makedirs("noisy_patches")
+    
+    original_filename = os.path.basename(patch_file_path)
+    filename_without_ext = os.path.splitext(original_filename)[0]
+    plot_filename = f"{filename_without_ext}_comparison.jpg"
+    plot_path = os.path.join("noisy_patches", plot_filename)
+    
+    fig.savefig(plot_path, format='jpeg', dpi=300, bbox_inches='tight')
+    print(f"Saved comparison plot to: {plot_path}")
+    
+    # THEN show
+    plt.show()
 
 
 # if __name__ == "__main__":

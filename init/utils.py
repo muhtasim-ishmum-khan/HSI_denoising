@@ -195,7 +195,7 @@ if __name__ == "__main__":
     print(f"Patch shape: {patches.shape[1:]} (channels, height, width)")
     
     # Add noise to patches
-    noise_injector = HSINoiseInjector(noise_std=0.05)
+    noise_injector = HSINoiseInjector(noise_std=0.1)
     noisy_patches = torch.stack([
         noise_injector.add_white_gaussian_noise(patch.unsqueeze(0)).squeeze(0) 
         for patch in patches

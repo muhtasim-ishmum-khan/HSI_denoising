@@ -1,85 +1,75 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim as optim
 import os
 import numpy as np
 import scipy.io as sio
 import matplotlib.pyplot as plt
-from generate_patches_restormer import generate_patches_from_mat
+import psutil
+import time
+from tqdm import tqdm
 
-# The SpectralSpatialConv3D class is a custom neural network module o process 3D HSI data.
-# Simply, it looks at a 3D block of data and transforms it into a new set of data that highlights important patterns or features.
-# The module uses a dual-branch architecture, meaning it processes the input data in two parallel branches with slightly different processing techniques,
-# then combines the results. This is for capturing different types of patterns in the data.
-# This dual-branch architecture was followed from the paper: "3D Quasi-Recurrent Neural Network for Hyperspectral Image Denoising"
 class SpectralSpatialConv3D(nn.Module):
-    # in_channels=1: The number of input channels, treating each hyperspectral patch as a single 3D volume.
-    # out_channels=n means the model produces n different feature maps to capture a diverse set of patterns in the HSI patches. 
-    # For example, one feature map might highlight edges in the spatial dimensions, while another captures changes across spectral bands.
+    """
+    3D CNN with dual-branch architecture for hyperspectral image feature extraction.
+    Uses ReLU and GELU activation functions in parallel branches.
+    """
     def __init__(self, in_channels=1, out_channels=64, dropout=0.2):
         super(SpectralSpatialConv3D, self).__init__()
 
-        # Layers in the first branch with ReLU.
-
-        # 3D convolution layer that takes in_channels as input and produces 32 feature maps (each highlighting different features).
-        # kernel_size=3 means it uses a 3x3x3 cube to scan the data (covering height, width, and spectral dimensions).
+        # Branch 1 with ReLU activation
         self.branch1_conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, padding=1)
-        # Batch normalization normalizes the output of the convolution to have a mean of 0 and a standard deviation of 1, stabilizes training
         self.branch1_bn1 = nn.BatchNorm3d(32)
-        # in 32 features maps from previous layer and out n(out_channels) feature maps, refining the features further.
         self.branch1_conv2 = nn.Conv3d(32, out_channels, kernel_size=3, padding=1)
         self.branch1_bn2 = nn.BatchNorm3d(out_channels)
 
-        # Layers in the first branch with GELU.
+        # Branch 2 with GELU activation
         self.branch2_conv1 = nn.Conv3d(in_channels, 32, kernel_size=3, padding=1)
         self.branch2_bn1 = nn.BatchNorm3d(32)
         self.branch2_conv2 = nn.Conv3d(32, out_channels, kernel_size=3, padding=1)
         self.branch2_bn2 = nn.BatchNorm3d(out_channels)
-        # The dropout rate, which is a technique to prevent overfitting by randomly turning off x% of the neurons during training.
+        
         self.dropout = nn.Dropout3d(p=dropout)
     
-    # The forward method defines how the input data flows through the layers to produce the output.
     def forward(self, x):
-        # Branch 1 with ReLU activation.
+        # Branch 1 with ReLU
         x1 = F.relu(self.branch1_bn1(self.branch1_conv1(x)))
         x1 = F.relu(self.branch1_bn2(self.branch1_conv2(x1)))
-        # Branch 2 with GELU activation.
+        
+        # Branch 2 with GELU
         x2 = F.gelu(self.branch2_bn1(self.branch2_conv1(x)))
         x2 = F.gelu(self.branch2_bn2(self.branch2_conv2(x2)))
 
-        # Aggregation of the output of two branches (element-wise addition)
+        # Fuse branches and apply dropout
         x_fused = x1 + x2
         x_fused = self.dropout(x_fused)
         return x_fused
 
-def load_and_process_patches_conv3d(mat_file_path, use_gpu=True, batch_size=32, patch_key='patches'):
+def load_patches_from_mat(mat_file_path, patch_key='patches'):
     """
-    Load pre-extracted patches from a .mat file and process them through the Conv3D model.
+    Load patches from a .mat file and convert to PyTorch tensor.
     
     Args:
-        mat_file_path (str): Path to the .mat file containing patches
-        use_gpu (bool): Whether to use GPU for processing
-        batch_size (int): Batch size for processing
-        patch_key (str): Key name in the .mat file that contains the patches
+        mat_file_path (str): Path to .mat file
+        patch_key (str): Key containing patch data
     
     Returns:
-        tuple: (input_patches, output_features, model)
+        torch.Tensor: Patches in format (N, 1, H, W, C)
     """
-    
-    # Load patches from .mat file
     try:
-        mat_data = sio.loadmat(mat_file_path)
         print(f"Loading patches from: {mat_file_path}")
+        mat_data = sio.loadmat(mat_file_path)
         
-        # Try to find patches in the .mat file
+        # Try to find patches with the specified key
         if patch_key in mat_data:
             patches = mat_data[patch_key]
         else:
-            # If patch_key not found, try common alternative names
-            possible_keys = ['patches', 'data', 'patch_data', 'hsi_patches']
+            # Try common alternative keys
+            possible_keys = ['patches', 'data', 'patch_data', 'hsi_patches', 'X']
             found_key = None
             for key in possible_keys:
-                if key in mat_data:
+                if key in mat_data and not key.startswith('__'):
                     found_key = key
                     break
             
@@ -88,111 +78,287 @@ def load_and_process_patches_conv3d(mat_file_path, use_gpu=True, batch_size=32, 
                 print(f"Found patches under key: '{found_key}'")
             else:
                 available_keys = [k for k in mat_data.keys() if not k.startswith('__')]
-                raise KeyError(f"Patch key '{patch_key}' not found. Available keys: {available_keys}")
+                raise KeyError(f"No patch data found. Available keys: {available_keys}")
         
-        print(f"Loaded patches shape: {patches.shape}")
+        print(f"Original patches shape: {patches.shape}")
+        
+        # Handle different input formats
+        if len(patches.shape) == 4:
+            # Assume format: (N, H, W, C) -> convert to (N, 1, H, W, C)
+            if patches.shape[-1] < patches.shape[1]:  # Spectral bands likely in last dimension
+                patches_tensor = torch.from_numpy(patches).float()
+                patches_tensor = patches_tensor.unsqueeze(1)  # Add channel dimension
+            else:
+                # Format might be (N, C, H, W) -> convert to (N, 1, H, W, C)
+                patches = np.transpose(patches, (0, 2, 3, 1))
+                patches_tensor = torch.from_numpy(patches).float()
+                patches_tensor = patches_tensor.unsqueeze(1)
+        else:
+            raise ValueError(f"Unexpected patch shape: {patches.shape}")
+        
+        print(f"Converted tensor shape: {patches_tensor.shape}")
+        return patches_tensor
         
     except Exception as e:
-        print(f"Error loading {mat_file_path}: {e}")
-        return None, None, None
-    
-    # Convert to PyTorch tensor
-    # Assuming patches are in format: (num_patches, height, width, spectral_bands)
-    # or (num_patches, spectral_bands, height, width)
-    if len(patches.shape) == 4:
-        # If patches are (num_patches, height, width, spectral_bands), transpose to (num_patches, spectral_bands, height, width)
-        if patches.shape[-1] < patches.shape[1]:  # spectral dimension is likely the last one
-            patches = np.transpose(patches, (0, 3, 1, 2))
-        
-        # Convert to tensor and add channel dimension: (num_patches, 1, spectral_bands, height, width)
-        patch_tensor = torch.from_numpy(patches).float().unsqueeze(1)
-        # Rearrange to: (num_patches, 1, height, width, spectral_bands) for Conv3D
-        patch_tensor = patch_tensor.permute(0, 1, 3, 4, 2)
-    else:
-        raise ValueError(f"Expected 4D patch array, got shape: {patches.shape}")
+        print(f"Error loading patches: {e}")
+        return None
 
-    if len(patch_tensor) == 0:
-        print("No patches found in the file.")
-        return None, None, None
+def get_memory_usage():
+    """Get current RAM usage in GB"""
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
+    return memory_info.rss / (1024 ** 3)  # Convert to GB
 
-    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+def train_conv3d_model(patches_tensor, num_epochs=50, batch_size=16, learning_rate=0.001, use_gpu=True):
+    """
+    Train the Conv3D model using self-supervised learning approach.
     
-    # Initialize the model
+    Args:
+        patches_tensor: Input patches tensor
+        num_epochs: Number of training epochs
+        batch_size: Batch size for training
+        learning_rate: Learning rate for optimizer
+        use_gpu: Whether to use GPU
+    
+    Returns:
+        model: Trained model
+        loss_history: Training loss history
+        memory_history: Memory usage history
+    """
+    device = torch.device(
+    "cuda" if use_gpu and torch.cuda.is_available() else
+    "mps" if use_gpu and torch.backends.mps.is_available() else
+    "cpu"
+)
+    print(f"Training on device: {device}")
+    
+    # Initialize model
     model = SpectralSpatialConv3D(in_channels=1, out_channels=64).to(device)
-    # Set the model to evaluation mode
-    model.eval()
-
-    # Process patches through the model
-    outputs = []
-    with torch.no_grad():
-        # Loop through the patch_tensor in chunks of batches
-        for i in range(0, patch_tensor.shape[0], batch_size):
-            # Extract a subset of patches (i to batch_size)
-            batch = patch_tensor[i:i+batch_size].to(device)
-            # Pass the batch through the model to get feature maps
-            batch_output = model(batch)
-            # Move the output back to CPU and store it in outputs
-            outputs.append(batch_output.cpu())
     
-    # Combine all batch outputs into a single tensor
-    output_tensor = torch.cat(outputs, dim=0)
-    return patch_tensor, output_tensor, model
+    # Define loss function (using MSE for reconstruction-like task)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # For self-supervised learning, we'll use the input as both input and target
+    # The model learns to extract meaningful features
+    patches_tensor = patches_tensor.to(device)
+    
+    # Training history
+    loss_history = []
+    memory_history = []
+    
+    print(f"Starting training for {num_epochs} epochs...")
+    print(f"Dataset size: {patches_tensor.shape[0]} patches")
+    print(f"Batch size: {batch_size}")
+    
+    model.train()
+    
+    for epoch in range(num_epochs):
+        epoch_loss = 0.0
+        num_batches = 0
+        
+        # Create random indices for batch sampling
+        indices = torch.randperm(patches_tensor.shape[0])
+        
+        # Progress bar for batches
+        batch_pbar = tqdm(range(0, patches_tensor.shape[0], batch_size), 
+                         desc=f"Epoch {epoch+1}/{num_epochs}", 
+                         leave=False)
+        
+        for i in batch_pbar:
+            # Get batch indices
+            batch_indices = indices[i:i+batch_size]
+            batch_data = patches_tensor[batch_indices]
+            
+            # Forward pass
+            optimizer.zero_grad()
+            features = model(batch_data)
+            
+            # For self-supervised learning, we can use different objectives
+            # Here we use feature consistency loss
+            target = batch_data.squeeze(1)  # Remove channel dimension for target
+            
+            # Reduce feature dimensions to match target
+            features_reduced = torch.mean(features, dim=1)  # Average across feature channels
+            
+            loss = criterion(features_reduced, target)
+            
+            # Backward pass
+            loss.backward()
+            optimizer.step()
+            
+            epoch_loss += loss.item()
+            num_batches += 1
+            
+            # Update progress bar
+            batch_pbar.set_postfix({'Loss': f'{loss.item():.4f}'})
+        
+        # Calculate average loss for epoch
+        avg_loss = epoch_loss / num_batches
+        loss_history.append(avg_loss)
+        
+        # Monitor memory usage
+        memory_usage = get_memory_usage()
+        memory_history.append(memory_usage)
+        
+        # Print epoch statistics
+        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {avg_loss:.4f} - RAM: {memory_usage:.2f} GB")
+        
+        # Clear cache to manage memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    
+    print("Training completed!")
+    return model, loss_history, memory_history
 
-# The visualize_feature_maps function takes input and output tensors from a neural network, 
-# selects one specific patch, and creates a side-by-side visualization.
-def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", x=0, y=0):
-    input_patch = input_tensor[index, 0].cpu().numpy()
-    output_patch = output_tensor[index].cpu().numpy()
-
-    fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-    fig.suptitle("Input Spectral Bands vs Output Feature Maps", fontsize=14)
-
-    for i in range(5):
-        band_idx = i * input_patch.shape[2] // 5  # Changed from shape[0] to shape[2] for spectral dimension
-        axes[0, i].imshow(input_patch[:, :, band_idx], cmap='gray')  # Updated indexing
-        axes[0, i].set_title(f"Input Band {band_idx}")
-        axes[0, i].axis('off')
-
-    for i in range(5):
-        axes[1, i].imshow(output_patch[i, output_patch.shape[1]//2], cmap='viridis')
-        axes[1, i].set_title(f"Feature Map {i}")
-        axes[1, i].axis('off')
-
-    plt.tight_layout()
-    save_dir = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/conv_3d"
+def visualize_results(original_patches, model, device, save_dir="/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/conv_3d"):
+    """
+    Visualize original patches and extracted features side by side.
+    
+    Args:
+        original_patches: Original patch tensor
+        model: Trained model
+        device: Computing device
+        save_dir: Directory to save visualizations
+    """
     os.makedirs(save_dir, exist_ok=True)
+    
+    model.eval()
+    with torch.no_grad():
+        # Select a few random patches for visualization
+        num_samples = min(5, original_patches.shape[0])
+        sample_indices = torch.randperm(original_patches.shape[0])[:num_samples]
+        
+        for idx, sample_idx in enumerate(sample_indices):
+            sample_patch = original_patches[sample_idx:sample_idx+1].to(device)
+            features = model(sample_patch)
+            
+            # Move to CPU for visualization
+            original = sample_patch[0, 0].cpu().numpy()  # Shape: (H, W, C)
+            feature_maps = features[0].cpu().numpy()  # Shape: (64, H, W, C)
+            
+            # Create visualization
+            fig, axes = plt.subplots(3, 5, figsize=(20, 12))
+            fig.suptitle(f"Original Patch vs Feature Maps - Sample {idx+1}", fontsize=16)
+            
+            # Show original patch (5 spectral bands)
+            for i in range(5):
+                band_idx = i * original.shape[2] // 5
+                axes[0, i].imshow(original[:, :, band_idx], cmap='gray')
+                axes[0, i].set_title(f"Original Band {band_idx}")
+                axes[0, i].axis('off')
+            
+            # Show first 5 feature maps (middle slice)
+            for i in range(5):
+                mid_slice = feature_maps.shape[2] // 2
+                axes[1, i].imshow(feature_maps[i, :, :, mid_slice], cmap='viridis')
+                axes[1, i].set_title(f"Feature Map {i}")
+                axes[1, i].axis('off')
+            
+            # Show next 5 feature maps
+            for i in range(5):
+                mid_slice = feature_maps.shape[2] // 2
+                axes[2, i].imshow(feature_maps[i+5, :, :, mid_slice], cmap='plasma')
+                axes[2, i].set_title(f"Feature Map {i+5}")
+                axes[2, i].axis('off')
+            
+            plt.tight_layout()
+            
+            # Save the visualization
+            save_path = os.path.join(save_dir, f"patch_features_sample_{idx+1}.png")
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Visualization saved: {save_path}")
+            plt.close()
 
-    # Build a base filename
-    base_filename = f"{file}_patch_{x}_{y}"
-    save_path = os.path.join(save_dir, f"{base_filename}.png")
+def plot_training_history(loss_history, memory_history, save_dir="/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/conv_3d"):
+    """Plot training loss and memory usage over epochs"""
+    os.makedirs(save_dir, exist_ok=True)
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+    
+    # Plot loss
+    ax1.plot(loss_history, 'b-', linewidth=2)
+    ax1.set_title('Training Loss Over Epochs')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.grid(True, alpha=0.3)
+    
+    # Plot memory usage
+    ax2.plot(memory_history, 'r-', linewidth=2)
+    ax2.set_title('RAM Usage Over Epochs')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('RAM Usage (GB)')
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    save_path = os.path.join(save_dir, "training_history.png")
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Training history saved: {save_path}")
+    plt.show()
 
-    # Add a counter if the file already exists
-    counter = 1
-    while os.path.exists(save_path):
-        save_path = os.path.join(save_dir, f"{base_filename}_{counter}.png")
-        counter += 1
-
-    plt.savefig(save_path)
-    print(f"Patch visualization saved at: {save_path}")
-    # plt.show()
+def main():
+    """Main function to orchestrate the training process"""
+    
+    # Configuration
+    mat_file_path = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches/train_Wash2_patches"
+    save_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/conv3d_results"
+    
+    # Training parameters
+    num_epochs = 30
+    batch_size = 16
+    learning_rate = 0.001
+    use_gpu = True
+    
+    print("=" * 60)
+    print("HSI Conv3D Feature Extraction Training")
+    print("=" * 60)
+    
+    # Load patches
+    print("\n1. Loading patches from .mat file...")
+    patches_tensor = load_patches_from_mat(mat_file_path)
+    
+    if patches_tensor is None:
+        print("Failed to load patches. Exiting...")
+        return
+    
+    print(f"Successfully loaded {patches_tensor.shape[0]} patches")
+    print(f"Patch dimensions: {patches_tensor.shape[1:]}")
+    
+    # Train model
+    print("\n2. Starting training...")
+    initial_memory = get_memory_usage()
+    print(f"Initial RAM usage: {initial_memory:.2f} GB")
+    
+    model, loss_history, memory_history = train_conv3d_model(
+        patches_tensor, 
+        num_epochs=num_epochs,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        use_gpu=use_gpu
+    )
+    
+    final_memory = get_memory_usage()
+    print(f"Final RAM usage: {final_memory:.2f} GB")
+    print(f"Memory increase: {final_memory - initial_memory:.2f} GB")
+    
+    # Visualize results
+    print("\n3. Generating visualizations...")
+    device = torch.device("cuda" if use_gpu and torch.cuda.is_available() else "cpu")
+    visualize_results(patches_tensor, model, device, save_dir)
+    
+    # Plot training history
+    print("\n4. Plotting training history...")
+    plot_training_history(loss_history, memory_history, save_dir)
+    
+    # Save trained model
+    model_path = os.path.join(save_dir, "trained_conv3d_model.pth")
+    torch.save(model.state_dict(), model_path)
+    print(f"Model saved: {model_path}")
+    
+    print("\n" + "=" * 60)
+    print("Training and visualization completed!")
+    print(f"Results saved in: {save_dir}")
+    print("=" * 60)
 
 if __name__ == "__main__":
-    # Path to the .mat file containing pre-extracted patches
-    mat_file_path = "/Users/muhtasimishmumkhan/Desktop/499/hsi/hybArch/HSI_denoising/saved_patches/train_Wash2_patches.mat"
-    
-    # Load and process patches from .mat file
-    patch_tensor, output, model = load_and_process_patches_conv3d(
-        mat_file_path, 
-        batch_size=32, 
-        patch_key='patches'  # Adjust this key name based on your .mat file structure
-    )
-
-    if patch_tensor is not None and output is not None:
-        print(f"Input shape: {patch_tensor.shape}")
-        print(f"Output shape: {output.shape}")
-        visualize_feature_maps(patch_tensor, output, index=0, file="sample", x=0, y=0)
-    else:
-        print("Patch processing failed.")
-
-
+    main()

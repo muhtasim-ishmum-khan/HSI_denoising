@@ -128,33 +128,80 @@ def load_and_process_patches_conv3d(mat_file_path, use_gpu=True, batch_size=32, 
 
 # The visualize_feature_maps function takes input and output tensors from a neural network, 
 # selects one specific patch, and creates a side-by-side visualization.
+# def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", x=0, y=0):
+#     input_patch = input_tensor[index, 0].cpu().numpy()
+#     output_patch = output_tensor[index].cpu().numpy()
+
+#     fig, axes = plt.subplots(2, 5, figsize=(15, 6))
+#     fig.suptitle("Input Spectral Bands vs Output Feature Maps", fontsize=14)
+
+#     for i in range(5):
+#         band_idx = i * input_patch.shape[2] // 5  # Changed from shape[0] to shape[2] for spectral dimension
+#         axes[0, i].imshow(input_patch[:, :, band_idx], cmap='gray')  # Updated indexing
+#         axes[0, i].set_title(f"Input Band {band_idx}")
+#         axes[0, i].axis('off')
+
+#     for i in range(5):
+#         axes[1, i].imshow(output_patch[i, output_patch.shape[1]//2], cmap='viridis')
+#         axes[1, i].set_title(f"Feature Map {i}")
+#         axes[1, i].axis('off')
+
+#     plt.tight_layout()
+#     save_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/conv_3d"
+#     os.makedirs(save_dir, exist_ok=True)
+
+#     # Build a base filename
+#     base_filename = f"{file}_patch_{x}_{y}"
+#     save_path = os.path.join(save_dir, f"{base_filename}.png")
+
+#     # Add a counter if the file already exists
+#     counter = 1
+#     while os.path.exists(save_path):
+#         save_path = os.path.join(save_dir, f"{base_filename}_{counter}.png")
+#         counter += 1
+
+#     plt.savefig(save_path)
+#     print(f"Patch visualization saved at: {save_path}")
+#     # plt.show()
 def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", x=0, y=0):
-    input_patch = input_tensor[index, 0].cpu().numpy()
-    output_patch = output_tensor[index].cpu().numpy()
+    input_patch = input_tensor[index, 0].cpu().numpy()  # (191, 32, 32)
+    output_patch = output_tensor[index].cpu().numpy()   # (64, 191, 32, 32)
 
-    fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-    fig.suptitle("Input Spectral Bands vs Output Feature Maps", fontsize=14)
+    # Use the central spectral band from the input
+    central_band = input_patch.shape[0] // 2
+    input_image = input_patch[central_band]  # (32, 32)
 
-    for i in range(5):
-        band_idx = i * input_patch.shape[2] // 5  # Changed from shape[0] to shape[2] for spectral dimension
-        axes[0, i].imshow(input_patch[:, :, band_idx], cmap='gray')  # Updated indexing
-        axes[0, i].set_title(f"Input Band {band_idx}")
+    num_feature_maps = 10  # Display first 10 feature maps
+    rows = 2
+    cols = 5
+    band = output_patch.shape[1] // 2  # central spectral band of output
+
+    fig, axes = plt.subplots(rows + 1, cols, figsize=(15, 9))
+    fig.suptitle("Input Patch and Corresponding Feature Maps (Middle Band)", fontsize=16)
+
+    # Top row: repeated input patch for comparison
+    for i in range(cols):
+        axes[0, i].imshow(input_image, cmap='gray')
+        axes[0, i].set_title(f"Input Band {central_band}")
         axes[0, i].axis('off')
 
-    for i in range(5):
-        axes[1, i].imshow(output_patch[i, output_patch.shape[1]//2], cmap='viridis')
-        axes[1, i].set_title(f"Feature Map {i}")
-        axes[1, i].axis('off')
+    # Next rows: Feature map slices
+    for i in range(num_feature_maps):
+        row = (i // cols) + 1
+        col = i % cols
+        # Feature map i at spectral band slice
+        feature_map = output_patch[i, band]  # (32, 32)
+        axes[row, col].imshow(feature_map, cmap='viridis')
+        axes[row, col].set_title(f"Feature Map {i} @ Band {band}")
+        axes[row, col].axis('off')
 
     plt.tight_layout()
     save_dir = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/conv_3d"
     os.makedirs(save_dir, exist_ok=True)
 
-    # Build a base filename
     base_filename = f"{file}_patch_{x}_{y}"
     save_path = os.path.join(save_dir, f"{base_filename}.png")
 
-    # Add a counter if the file already exists
     counter = 1
     while os.path.exists(save_path):
         save_path = os.path.join(save_dir, f"{base_filename}_{counter}.png")
@@ -162,11 +209,12 @@ def visualize_feature_maps(input_tensor, output_tensor, index=0, file="sample", 
 
     plt.savefig(save_path)
     print(f"Patch visualization saved at: {save_path}")
-    # plt.show()
+
+
 
 if __name__ == "__main__":
     # Path to the .mat file containing pre-extracted patches
-    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/init/noisy_patches/train_Wash2_patches_noisy.mat"
     
     # Load and process patches from .mat file
     patch_tensor, output, model = load_and_process_patches_conv3d(

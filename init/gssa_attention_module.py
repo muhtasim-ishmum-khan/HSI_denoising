@@ -295,7 +295,7 @@ def analyze_spectral_enhancement(conv3d_output, gssa_output, index=0,
 
 
 if __name__ == "__main__":
-    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/saved_patches/train_Wash2_patches.mat"
+    mat_file_path = "/home/habib/Documents/workspace/hsi_enoising_hybrid/HSI_denoising/init/noisy_patches/train_Wash2_patches_noisy.mat"
     
     print("🚀 Processing patches through Conv3D → GSSA pipeline...")
     

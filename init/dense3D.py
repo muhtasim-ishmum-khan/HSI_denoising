@@ -77,6 +77,7 @@ class ResidualConv3DProgressiveRefinement(nn.Module):
         # Feature aggregation with learnable weight
         # conv3d provides local features, gssa provides global spectral context
         aggregated = conv3d_features + self.aggregation_weight * gssa_features
+        # aggregated = conv3d_features + gssa_features
 
         # Block 1: General spatial-spectral features (3x3x3)
         x1 = F.gelu(self.block1_norm(self.block1_conv(aggregated)))

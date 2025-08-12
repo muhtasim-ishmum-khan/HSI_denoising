@@ -98,4 +98,4 @@ class ResidualConv3DProgressiveRefinement(nn.Module):
         # Final denoising - reconstruct clean patches
         denoised = self.final_conv(x3)
 
-        return denoised
+        return denoised, aggregated

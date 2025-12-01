@@ -10,12 +10,12 @@
 
 ### Progression of image quality
 #### Peak-to-peak Signal Ratio (PSNR)
-<img width="300" height="400" alt="step2" src="psnr.png" />
+<img width="300" height="400" alt="step2" src="PSNR.png" />
 
 #### Spectral Angle Mapper (SAM)
-<img width="300" height="400" alt="step2" src="sam.png" />
+<img width="300" height="400" alt="step2" src="SAM.png" />
 
 #### Structural Similiarity Index Measure
-<img width="300" height="400" alt="step2" src="ssim.png" />
+<img width="300" height="400" alt="step2" src="SSIM.png" />
 
 

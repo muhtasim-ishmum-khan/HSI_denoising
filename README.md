@@ -16,7 +16,7 @@
 #### Spectral Angle Mapper (SAM)
 <img width="300" height="400" alt="step2" src="SAM.png" />
 
-#### Structural Similiarity Index Measure
+#### Structural Similiarity Index Measure (SSIM)
 <img width="300" height="400" alt="step2" src="SSIM.png" />
 
 ## Running the code

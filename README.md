@@ -20,8 +20,10 @@
 <img width="300" height="400" alt="step2" src="SSIM.png" />
 
 ## Running the code
-### The codes for training and testing are available in _v15_final.
+### The codes for training and testing are available in _v15_final. The saved model trained for noise level 50 is located in the SavedModels folder.
 ### Step 1:
-#### 
+#### Navigate to the files: "train_v15.py" and "test_v15.py" and change the paths of the directories as required.
+### Step 2:
+#### Use the notebook: run_training_testing.ipynb to run testing or training.
 
 

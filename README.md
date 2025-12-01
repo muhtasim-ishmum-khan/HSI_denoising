@@ -2,9 +2,20 @@
 ### Both training and testing codes are in _v15_final
 
 ## The architecture
-<img width="1100" height="548" alt="step2" src="https://github.com/muhtasim-ishmum-khan/muhtasim-ishmum-khan/blob/main/FIG1_arch.png" />
+<img width="800" height="400" alt="step2" src="https://github.com/muhtasim-ishmum-khan/muhtasim-ishmum-khan/blob/main/FIG1_arch.png" />
 
 ## Results
+### The Loss curve
+<img width="300" height="400" alt="step2" src="Loss.png" />
 
+### Progression of image quality
+#### Peak-to-peak Signal Ratio (PSNR)
+<img width="300" height="400" alt="step2" src="psnr.png" />
+
+#### Spectral Angle Mapper (SAM)
+<img width="300" height="400" alt="step2" src="sam.png" />
+
+#### Structural Similiarity Index Measure
+<img width="300" height="400" alt="step2" src="ssim.png" />
 
 
